@@ -33,7 +33,7 @@ interface Dials {
 }
 
 const DEFAULT_DIALS: Dials = {
-  cards: 100,
+  cards: 64,
   radius: 480,
   cardScale: 0.52,
   play: true,
