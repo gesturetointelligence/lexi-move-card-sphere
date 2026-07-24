@@ -23,6 +23,8 @@ interface Dials {
   play: boolean
   speed: number
   wobble: number
+  preset: string
+  growMethod: string
   source: string
   depthFade: number
   depthBlur: number
@@ -37,15 +39,87 @@ const DEFAULT_DIALS: Dials = {
   play: true,
   speed: 12,
   wobble: 8,
+  preset: 'orbit',
+  growMethod: 'bloom',
   source: 'treatment',
-  depthFade: 0.9,
-  depthBlur: 0,
-  depthDim: 0,
-  depthDesaturate: 0,
+  depthFade: 0,
+  depthBlur: 6,
+  depthDim: 1,
+  depthDesaturate: 1,
 }
 
+const MOTION_PRESETS = ['orbit', 'drift', 'pendulum', 'tumble', 'pulse']
+const GROW_METHOD_NAMES = ['bloom', 'spiral', 'burst', 'steps', 'stack']
+
+const easeOutCubic = (p: number) => 1 - Math.pow(1 - p, 3)
+const easeOutBack = (p: number) => {
+  const c = 1.70158
+  return 1 + (c + 1) * Math.pow(p - 1, 3) + c * Math.pow(p - 1, 2)
+}
+const clamp01 = (v: number) => Math.max(0, Math.min(1, v))
+
+interface GrowMethod {
+  dur: number
+  /** fraction of MAX_CARDS at progress p (floored to 1 card) */
+  cards: (p: number) => number
+  /** fraction of the target radius at progress p */
+  radius: (p: number) => number
+  /** spin speed in deg/s at progress p */
+  speed: (p: number) => number
+}
+
+const spinDecay = (start: number, decay: number) => (p: number) =>
+  DEFAULT_DIALS.speed + (start - DEFAULT_DIALS.speed) * Math.pow(1 - p, decay)
+
+const GROW_METHODS: Record<string, GrowMethod> = {
+  // swell out of the centre, spin decaying all the way
+  bloom: {
+    dur: 7500,
+    cards: (p) => easeOutCubic(clamp01(p / 0.73)),
+    radius: (p) => easeOutCubic(clamp01(p / 0.73)),
+    speed: spinDecay(170, 2.2),
+  },
+  // steady unfurl — count and radius climb together at a constant rate
+  spiral: {
+    dur: 8000,
+    cards: (p) => clamp01(p / 0.85),
+    radius: (p) => clamp01(p / 0.85),
+    speed: (p) => (p < 0.6 ? 120 : spinDecay(120, 2)((p - 0.6) / 0.4)),
+  },
+  // everything at once: cards slam in, radius overshoots and settles
+  burst: {
+    dur: 3800,
+    cards: (p) => clamp01(p * 3.2),
+    radius: (p) => easeOutBack(clamp01(p * 1.8)),
+    speed: spinDecay(260, 2),
+  },
+  // one… ten… a hundred
+  steps: {
+    dur: 7500,
+    cards: (p) =>
+      p < 0.16 ? 0
+      : p < 0.26 ? (0.1 * (p - 0.16)) / 0.1
+      : p < 0.48 ? 0.1
+      : p < 0.72 ? 0.1 + (0.9 * (p - 0.48)) / 0.24
+      : 1,
+    radius: (p) => easeOutCubic(clamp01(p / 0.8)),
+    speed: spinDecay(150, 1.8),
+  },
+  // pile up at the centre, then spring outward into place
+  stack: {
+    dur: 7000,
+    cards: (p) => easeOutCubic(clamp01(p / 0.5)),
+    radius: (p) => (p < 0.52 ? 0 : easeOutBack(clamp01((p - 0.52) / 0.4))),
+    speed: spinDecay(170, 2.2),
+  },
+}
+
+// the opening card is always the brand card: signal green, ink text
+const SIGNAL_CARD: CardColours = { bg: '#d0e62c', fg: '#151715' }
+
 export default function App() {
-  const [dials, setDials] = useState<Dials>(DEFAULT_DIALS)
+  // pre-grow seed state: one card at the centre, radius zero
+  const [dials, setDials] = useState<Dials>({ ...DEFAULT_DIALS, cards: 1, radius: 0 })
   const [seed, setSeed] = useState(1)
   const [captured, setCaptured] = useState<string[] | null>(null)
 
@@ -62,13 +136,15 @@ export default function App() {
     DialStore.registerPanel(PANEL_ID, 'Card Sphere', {
       sphere: {
         cards: [DEFAULT_DIALS.cards, 1, MAX_CARDS, 1],
-        radius: [DEFAULT_DIALS.radius, 160, 800, 10],
+        radius: [DEFAULT_DIALS.radius, 0, 800, 10],
         cardScale: [DEFAULT_DIALS.cardScale, 0.25, 1.4, 0.01],
       },
       motion: {
         play: DEFAULT_DIALS.play,
         speed: [DEFAULT_DIALS.speed, -200, 200, 1],
         wobble: [DEFAULT_DIALS.wobble, 0, 45, 1],
+        preset: { type: 'select', options: MOTION_PRESETS, default: DEFAULT_DIALS.preset },
+        growMethod: { type: 'select', options: GROW_METHOD_NAMES, default: DEFAULT_DIALS.growMethod },
         grow: { type: 'action', label: 'Grow' },
       },
       depth: {
@@ -84,6 +160,11 @@ export default function App() {
       },
     })
 
+    // seed the pre-grow state in the store too, so the first paint is a
+    // single signal card at the centre rather than a flash of the full sphere
+    DialStore.updateValue(PANEL_ID, 'sphere.cards', 1)
+    DialStore.updateValue(PANEL_ID, 'sphere.radius', 0)
+
     const readValues = () => {
       const v = DialStore.getValues(PANEL_ID)
       setDials({
@@ -93,6 +174,8 @@ export default function App() {
         play: v['motion.play'] as boolean,
         speed: v['motion.speed'] as number,
         wobble: v['motion.wobble'] as number,
+        preset: v['motion.preset'] as string,
+        growMethod: v['motion.growMethod'] as string,
         source: v['colour.source'] as string,
         depthFade: v['depth.fade'] as number,
         depthBlur: v['depth.blur'] as number,
@@ -102,41 +185,40 @@ export default function App() {
     }
     readValues()
 
-    // 'grow' — one card seeds the sphere, multiplies while spinning with
-    // momentum, then the spin decays into a slow idle rotation. Pure dial
-    // choreography: it animates the real DialKit values.
+    // 'grow' — one card seeds the sphere at the centre (radius 0), grows to
+    // the full sphere, then the spin decays into a slow idle rotation. Pure
+    // dial choreography via the selected grow method: it animates the real
+    // DialKit values.
     let growRaf = 0
     const runGrow = () => {
       cancelAnimationFrame(growRaf)
-      const GROW_MS = 5500
-      const DECAY_MS = 7500
-      const START_SPEED = 170
-      const REST_SPEED = DEFAULT_DIALS.speed
+      const v = DialStore.getValues(PANEL_ID)
+      const method = GROW_METHODS[v['motion.growMethod'] as string] ?? GROW_METHODS.bloom
+      const targetR = (v['sphere.radius'] as number) || DEFAULT_DIALS.radius
       DialStore.updateValue(PANEL_ID, 'sphere.cards', 1)
+      DialStore.updateValue(PANEL_ID, 'sphere.radius', 0)
       DialStore.updateValue(PANEL_ID, 'motion.play', true)
-      DialStore.updateValue(PANEL_ID, 'motion.speed', START_SPEED)
+      DialStore.updateValue(PANEL_ID, 'motion.speed', Math.round(method.speed(0)))
       const t0 = performance.now()
       let lastCards = 1
-      let lastSpeedAt = 0
+      let lastTickAt = 0
       const step = (now: number) => {
-        const t = now - t0
-        const pGrow = Math.min(1, t / GROW_MS)
-        const eased = 1 - Math.pow(1 - pGrow, 3)
-        const cards = Math.max(1, Math.round(1 + (MAX_CARDS - 1) * eased))
+        const p = Math.min(1, (now - t0) / method.dur)
+        const cards = Math.max(1, Math.round(method.cards(p) * MAX_CARDS))
         if (cards !== lastCards) {
           lastCards = cards
           DialStore.updateValue(PANEL_ID, 'sphere.cards', cards)
         }
-        if (now - lastSpeedAt > 66) {
-          lastSpeedAt = now
-          const pDecay = Math.min(1, t / DECAY_MS)
-          const speed = REST_SPEED + (START_SPEED - REST_SPEED) * Math.pow(1 - pDecay, 2.2)
-          DialStore.updateValue(PANEL_ID, 'motion.speed', Math.round(speed))
+        if (now - lastTickAt > 66) {
+          lastTickAt = now
+          DialStore.updateValue(PANEL_ID, 'sphere.radius', Math.round(method.radius(p) * targetR))
+          DialStore.updateValue(PANEL_ID, 'motion.speed', Math.round(method.speed(p)))
         }
-        if (t < DECAY_MS) {
+        if (p < 1) {
           growRaf = requestAnimationFrame(step)
         } else {
-          DialStore.updateValue(PANEL_ID, 'motion.speed', REST_SPEED)
+          DialStore.updateValue(PANEL_ID, 'sphere.radius', targetR)
+          DialStore.updateValue(PANEL_ID, 'motion.speed', DEFAULT_DIALS.speed)
         }
       }
       growRaf = requestAnimationFrame(step)
@@ -175,6 +257,8 @@ export default function App() {
 
     const onDown = (e: PointerEvent) => {
       dragging = true
+      // tumble can leave pitch far outside the drag range — normalise first
+      pitch = Math.max(-80, Math.min(80, ((pitch % 360) + 540) % 360 - 180))
       lastX = e.clientX
       lastY = e.clientY
       velYaw = 0
@@ -209,9 +293,30 @@ export default function App() {
         velYaw *= 0.95
         velPitch *= 0.95
         if (d.play) {
-          yaw += d.speed * dt
-          const target = Math.sin(now / 2400) * d.wobble
-          pitch += (target - pitch) * Math.min(1, dt * 1.2)
+          const easeTo = (target: number) => {
+            pitch += (target - pitch) * Math.min(1, dt * 1.2)
+          }
+          switch (d.preset) {
+            case 'drift': // slow wander, speed swelling and ebbing
+              yaw += d.speed * dt * (0.55 + 0.45 * Math.sin(now / 5200))
+              easeTo((Math.sin(now / 3100) + 0.5 * Math.sin(now / 1700)) * d.wobble)
+              break
+            case 'pendulum': // swing back and forth
+              yaw += Math.cos(now / 1400) * d.speed * dt * 2
+              easeTo(Math.sin(now / 2800) * d.wobble)
+              break
+            case 'tumble': // end over end, both axes advancing
+              yaw += d.speed * dt
+              pitch += d.speed * 0.35 * dt
+              break
+            case 'pulse': // surges of spin between near-pauses
+              yaw += d.speed * dt * (0.25 + 1.5 * Math.pow(0.5 + 0.5 * Math.sin(now / 1600), 2))
+              easeTo(Math.sin(now / 3200) * d.wobble)
+              break
+            default: // orbit — steady spin, gentle sway
+              yaw += d.speed * dt
+              easeTo(Math.sin(now / 2400) * d.wobble)
+          }
         }
       }
       sphere.style.transform = `translateZ(${-d.radius * 0.35}px) rotateX(${pitch}deg) rotateY(${yaw}deg)`
@@ -262,7 +367,9 @@ export default function App() {
     if (dials.source === 'capture' && captured) {
       // stride 7 so neighbouring nodes land on distant candidates
       const offset = Math.floor(rng() * 97)
-      return Array.from({ length: n }, (_, i) => pickPair(captured, i * 7 + offset))
+      return Array.from({ length: n }, (_, i) =>
+        i === 0 ? SIGNAL_CARD : pickPair(captured, i * 7 + offset),
+      )
     }
     // one treatment palette per card — shuffled so no two cards share one
     const perm = TREATMENT_PALETTES.map((_, i) => i)
@@ -271,7 +378,7 @@ export default function App() {
       ;[perm[i], perm[j]] = [perm[j], perm[i]]
     }
     return Array.from({ length: n }, (_, i) =>
-      pickPair(TREATMENT_PALETTES[perm[i % perm.length]], Math.floor(rng() * 5)),
+      i === 0 ? SIGNAL_CARD : pickPair(TREATMENT_PALETTES[perm[i % perm.length]], Math.floor(rng() * 5)),
     )
   }, [dials.cards, dials.source, captured, seed])
 

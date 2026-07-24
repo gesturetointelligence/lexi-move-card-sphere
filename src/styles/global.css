@@ -56,10 +56,10 @@ body {
   --yaw: 0deg;
   --pitch: 0deg;
   /* depth-method strengths, driven by the depth dials */
-  --depth-fade: 0.9;
-  --depth-blur: 0;
-  --depth-dim: 0;
-  --depth-desat: 0;
+  --depth-fade: 0;
+  --depth-blur: 6;
+  --depth-dim: 1;
+  --depth-desat: 1;
 }
 
 /* registered so dial changes (count / radius / scale) transition smoothly */

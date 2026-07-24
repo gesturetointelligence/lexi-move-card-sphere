@@ -33,6 +33,15 @@ export interface CardScheme {
 
 /** Deterministic per-phrase styling: font personality + ~30% lowercase. */
 export function schemeForPhrase(phrase: string): CardScheme {
+  // the opening card is always the brand card: SF Pro Rounded on signal
+  if (phrase === 'hello, world.') {
+    return {
+      text: phrase,
+      fontFamily: CARD_FONTS[1].family,
+      fontWeight: CARD_FONTS[1].weight,
+      fontSize: computeCardFontSize(phrase),
+    }
+  }
   const h = hashString(phrase)
   const font = CARD_FONTS[h % CARD_FONTS.length]
   const text = (h >> 3) % 10 < 3 ? phrase.toLowerCase() : phrase
