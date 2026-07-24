@@ -157,7 +157,7 @@ body {
 .lens {
   position: fixed;
   left: 20px;
-  bottom: 44px;
+  bottom: 20px;
   width: 256px;
   padding: 8px;
   border-radius: 14px;
@@ -224,33 +224,3 @@ body {
   border-radius: 3px;
 }
 
-/* --- chrome --- */
-
-.chrome {
-  position: fixed;
-  left: 20px;
-  display: flex;
-  gap: 10px;
-  align-items: baseline;
-  font-size: 14px;
-  letter-spacing: 0.01em;
-  pointer-events: none;
-  z-index: 10;
-}
-
-.chrome-top {
-  top: 18px;
-}
-
-.chrome-bottom {
-  bottom: 18px;
-  font-size: 12px;
-}
-
-.wordmark {
-  color: var(--signal);
-}
-
-.dim {
-  color: var(--grey);
-}

@@ -409,11 +409,6 @@ export default function App() {
           ))}
         </div>
       </div>
-      <header className="chrome chrome-top">
-        <span className="wordmark">Card Sphere</span>
-        <span className="dim">lexi-play</span>
-      </header>
-      <footer className="chrome chrome-bottom dim">drag to spin · dials top right</footer>
       {imageSrc && lensOpen && dials.source === 'capture' && (
         <CaptureLens
           src={imageSrc}
