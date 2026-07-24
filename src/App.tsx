@@ -2,10 +2,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { DialRoot, DialStore } from 'dialkit'
 import 'dialkit/styles.css'
 import { Card } from './components/Card.tsx'
+import { CaptureLens } from './components/CaptureLens.tsx'
 import { PHRASES } from './lib/phrases.ts'
 import { TREATMENT_PALETTES } from './lib/palettes.ts'
 import { fibonacciSphere } from './lib/sphere.ts'
-import { extractPalette, mulberry32, pickPair, samplePixels } from './lib/colour.ts'
+import { mulberry32, pickPair } from './lib/colour.ts'
 import type { CardColours } from './lib/colour.ts'
 
 const PANEL_ID = 'card-sphere'
@@ -122,6 +123,8 @@ export default function App() {
   const [dials, setDials] = useState<Dials>({ ...DEFAULT_DIALS, cards: 1, radius: 0 })
   const [seed, setSeed] = useState(1)
   const [captured, setCaptured] = useState<string[] | null>(null)
+  const [imageSrc, setImageSrc] = useState<string | null>(null)
+  const [lensOpen, setLensOpen] = useState(false)
 
   const sphereRef = useRef<HTMLDivElement>(null)
   const fileRef = useRef<HTMLInputElement>(null)
@@ -339,23 +342,20 @@ export default function App() {
     }
   }, [])
 
-  // --- image upload → median-cut palette → capture mode ---
+  // --- image upload → capture lens; the visible region drives the palette ---
   const onFile = (file: File | undefined) => {
     if (!file) return
     const reader = new FileReader()
     reader.onload = () => {
-      const img = new Image()
-      img.onload = () => {
-        const palette = extractPalette(samplePixels(img), 10)
-        if (palette.length >= 2) {
-          setCaptured(palette)
-          setSeed((s) => s + 1)
-          DialStore.updateValue(PANEL_ID, 'colour.source', 'capture')
-        }
-      }
-      img.src = reader.result as string
+      setImageSrc(reader.result as string)
+      setLensOpen(true)
+      DialStore.updateValue(PANEL_ID, 'colour.source', 'capture')
     }
     reader.readAsDataURL(file)
+  }
+
+  const onLensPalette = (palette: string[]) => {
+    setCaptured(palette)
   }
 
   // --- card data ---
@@ -414,6 +414,14 @@ export default function App() {
         <span className="dim">lexi-play</span>
       </header>
       <footer className="chrome chrome-bottom dim">drag to spin · dials top right</footer>
+      {imageSrc && lensOpen && dials.source === 'capture' && (
+        <CaptureLens
+          src={imageSrc}
+          palette={captured ?? []}
+          onPalette={onLensPalette}
+          onClose={() => setLensOpen(false)}
+        />
+      )}
       <input
         ref={fileRef}
         type="file"

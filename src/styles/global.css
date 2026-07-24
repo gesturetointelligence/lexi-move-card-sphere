@@ -39,6 +39,7 @@ body {
   perspective: 1400px;
   cursor: grab;
   touch-action: none;
+  -webkit-user-select: none;
   user-select: none;
   overflow: hidden;
 }
@@ -105,6 +106,8 @@ body {
     inset 0 0 0 1px color-mix(in srgb, var(--card-fg) 25%, transparent),
     0 24px 36px color-mix(in srgb, var(--card-bg) 14%, transparent);
   padding: 16px 16px 20px;
+  /* cards are scenery — the stage owns every pointer interaction */
+  pointer-events: none;
   /* orbit to the node, then undo every rotation so the card faces the viewer */
   transform: rotateY(var(--ry)) rotateX(var(--rx)) translateZ(var(--r))
     rotateX(calc(-1 * var(--rx))) rotateY(calc(-1 * (var(--ry) + var(--yaw))))
@@ -147,6 +150,78 @@ body {
   overflow-wrap: break-word;
   /* if a back is ever glimpsed, it reads as the solid card colour */
   backface-visibility: hidden;
+}
+
+/* --- capture lens --- */
+
+.lens {
+  position: fixed;
+  left: 20px;
+  bottom: 44px;
+  width: 256px;
+  padding: 8px;
+  border-radius: 14px;
+  background: #1d201d;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.45);
+  z-index: 20;
+}
+
+.lens-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px 6px;
+  font-size: 11px;
+  color: var(--grey);
+}
+
+.lens-close {
+  border: none;
+  background: none;
+  color: var(--grey);
+  font-size: 16px;
+  line-height: 1;
+  padding: 0 2px;
+  cursor: pointer;
+}
+
+.lens-close:hover {
+  color: var(--white);
+}
+
+.lens-frame {
+  position: relative;
+  overflow: hidden;
+  border-radius: 8px;
+  cursor: grab;
+  touch-action: none;
+}
+
+.lens-frame:active {
+  cursor: grabbing;
+}
+
+.lens-frame img {
+  position: absolute;
+  top: 0;
+  left: 0;
+  transform-origin: 0 0;
+  max-width: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.lens-swatches {
+  display: flex;
+  gap: 3px;
+  margin-top: 8px;
+  height: 12px;
+}
+
+.lens-swatches span {
+  flex: 1;
+  border-radius: 3px;
 }
 
 /* --- chrome --- */

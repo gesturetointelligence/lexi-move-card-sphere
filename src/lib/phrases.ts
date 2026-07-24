@@ -1,5 +1,6 @@
-// 100 card phrases in the Magic register — real things people say aloud:
-// cafés, ticket desks, shops, transit, everyday chats.
+// 100 card phrases in the Magic register — things said aloud to someone
+// present: cafés, ticket desks, shops, transit, everyday chats. Never
+// P2P text messages; Magic speaks in person, not over the wire.
 export const PHRASES: string[] = [
   'hello, world.',
   'Large flat white with oat milk, please.',
@@ -31,7 +32,7 @@ export const PHRASES: string[] = [
   'Extra hot, three-quarter full.',
   "What's good here?",
   'One adult, one child, return.',
-  'Sorry, running five minutes late.',
+  'Sorry to keep you waiting.',
   'Could you write that down?',
   "I'm learning Auslan.",
   'Nice to meet you.',
@@ -76,11 +77,11 @@ export const PHRASES: string[] = [
   'Congratulations, you two.',
   'Good luck tomorrow.',
   'Safe travels.',
-  'Text me when you land.',
-  "I'm outside, blue jacket.",
-  'On my way now.',
-  'Five minutes away.',
-  'Meet you at the corner.',
+  'Say hi to your mum for me.',
+  "This round's on me.",
+  'Lead the way.',
+  'Give me five minutes.',
+  'Walk you to the corner?',
   'The usual, please.',
   'You remembered — thank you.',
   'How was your weekend?',
