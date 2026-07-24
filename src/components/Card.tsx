@@ -14,26 +14,26 @@ interface CardProps {
 
 export const Card = memo(function Card({ phrase, colours, node, radius, scale }: CardProps) {
   const scheme = schemeForPhrase(phrase)
-  const vars = {
+  const style = {
     '--card-bg': colours.bg,
     '--card-fg': colours.fg,
+    '--ry': `${node.ry}deg`,
+    '--rx': `${node.rx}deg`,
+    '--r': `${radius}px`,
+    '--s': String(scale),
   } as CSSProperties
-  const place = `rotateY(${node.ry}deg) rotateX(${node.rx}deg) translateZ(${radius}px) scale(${scale})`
   return (
-    <>
-      <div className="card" style={{ ...vars, transform: place }}>
-        <p
-          className="card-text"
-          style={{
-            fontFamily: scheme.fontFamily,
-            fontWeight: scheme.fontWeight,
-            fontSize: scheme.fontSize,
-          }}
-        >
-          {scheme.text}
-        </p>
-      </div>
-      <div className="card card-back" style={{ ...vars, transform: `${place} rotateY(180deg)` }} />
-    </>
+    <div className="card" style={style}>
+      <p
+        className="card-text"
+        style={{
+          fontFamily: scheme.fontFamily,
+          fontWeight: scheme.fontWeight,
+          fontSize: scheme.fontSize,
+        }}
+      >
+        {scheme.text}
+      </p>
+    </div>
   )
 })

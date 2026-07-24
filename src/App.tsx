@@ -9,6 +9,7 @@ import { extractPalette, mulberry32, pickPair, samplePixels } from './lib/colour
 import type { CardColours } from './lib/colour.ts'
 
 const PANEL_ID = 'card-sphere'
+const MAX_CARDS = Math.min(PHRASES.length, TREATMENT_PALETTES.length)
 
 // dev-only: lets local tooling drive the dials programmatically
 if (import.meta.env.DEV) {
@@ -23,16 +24,24 @@ interface Dials {
   speed: number
   wobble: number
   source: string
+  depthFade: number
+  depthBlur: number
+  depthDim: number
+  depthDesaturate: number
 }
 
 const DEFAULT_DIALS: Dials = {
   cards: 100,
   radius: 480,
   cardScale: 0.52,
-  play: false,
-  speed: 14,
+  play: true,
+  speed: 12,
   wobble: 8,
   source: 'treatment',
+  depthFade: 0.9,
+  depthBlur: 0,
+  depthDim: 0,
+  depthDesaturate: 0,
 }
 
 export default function App() {
@@ -52,14 +61,21 @@ export default function App() {
     registered.current = true
     DialStore.registerPanel(PANEL_ID, 'Card Sphere', {
       sphere: {
-        cards: [DEFAULT_DIALS.cards, 1, Math.min(PHRASES.length, TREATMENT_PALETTES.length), 1],
+        cards: [DEFAULT_DIALS.cards, 1, MAX_CARDS, 1],
         radius: [DEFAULT_DIALS.radius, 160, 800, 10],
         cardScale: [DEFAULT_DIALS.cardScale, 0.25, 1.4, 0.01],
       },
       motion: {
         play: DEFAULT_DIALS.play,
-        speed: [DEFAULT_DIALS.speed, -80, 80, 1],
+        speed: [DEFAULT_DIALS.speed, -200, 200, 1],
         wobble: [DEFAULT_DIALS.wobble, 0, 45, 1],
+        grow: { type: 'action', label: 'Grow' },
+      },
+      depth: {
+        fade: [DEFAULT_DIALS.depthFade, 0, 1, 0.05],
+        blur: [DEFAULT_DIALS.depthBlur, 0, 14, 0.5],
+        dim: [DEFAULT_DIALS.depthDim, 0, 1, 0.05],
+        desaturate: [DEFAULT_DIALS.depthDesaturate, 0, 1, 0.05],
       },
       colour: {
         source: { type: 'select', options: ['treatment', 'capture'], default: DEFAULT_DIALS.source },
@@ -78,17 +94,66 @@ export default function App() {
         speed: v['motion.speed'] as number,
         wobble: v['motion.wobble'] as number,
         source: v['colour.source'] as string,
+        depthFade: v['depth.fade'] as number,
+        depthBlur: v['depth.blur'] as number,
+        depthDim: v['depth.dim'] as number,
+        depthDesaturate: v['depth.desaturate'] as number,
       })
     }
     readValues()
+
+    // 'grow' — one card seeds the sphere, multiplies while spinning with
+    // momentum, then the spin decays into a slow idle rotation. Pure dial
+    // choreography: it animates the real DialKit values.
+    let growRaf = 0
+    const runGrow = () => {
+      cancelAnimationFrame(growRaf)
+      const GROW_MS = 5500
+      const DECAY_MS = 7500
+      const START_SPEED = 170
+      const REST_SPEED = DEFAULT_DIALS.speed
+      DialStore.updateValue(PANEL_ID, 'sphere.cards', 1)
+      DialStore.updateValue(PANEL_ID, 'motion.play', true)
+      DialStore.updateValue(PANEL_ID, 'motion.speed', START_SPEED)
+      const t0 = performance.now()
+      let lastCards = 1
+      let lastSpeedAt = 0
+      const step = (now: number) => {
+        const t = now - t0
+        const pGrow = Math.min(1, t / GROW_MS)
+        const eased = 1 - Math.pow(1 - pGrow, 3)
+        const cards = Math.max(1, Math.round(1 + (MAX_CARDS - 1) * eased))
+        if (cards !== lastCards) {
+          lastCards = cards
+          DialStore.updateValue(PANEL_ID, 'sphere.cards', cards)
+        }
+        if (now - lastSpeedAt > 66) {
+          lastSpeedAt = now
+          const pDecay = Math.min(1, t / DECAY_MS)
+          const speed = REST_SPEED + (START_SPEED - REST_SPEED) * Math.pow(1 - pDecay, 2.2)
+          DialStore.updateValue(PANEL_ID, 'motion.speed', Math.round(speed))
+        }
+        if (t < DECAY_MS) {
+          growRaf = requestAnimationFrame(step)
+        } else {
+          DialStore.updateValue(PANEL_ID, 'motion.speed', REST_SPEED)
+        }
+      }
+      growRaf = requestAnimationFrame(step)
+    }
+    const introTimer = window.setTimeout(runGrow, 500)
+
     const unsubValues = DialStore.subscribe(PANEL_ID, readValues)
     const unsubActions = DialStore.subscribeActions(PANEL_ID, (action) => {
       if (action === 'colour.randomise') setSeed((s) => s + 1)
       if (action === 'colour.upload') fileRef.current?.click()
+      if (action === 'motion.grow') runGrow()
     })
     return () => {
       unsubValues()
       unsubActions()
+      window.clearTimeout(introTimer)
+      cancelAnimationFrame(growRaf)
     }
   }, [])
 
@@ -150,6 +215,8 @@ export default function App() {
         }
       }
       sphere.style.transform = `translateZ(${-d.radius * 0.35}px) rotateX(${pitch}deg) rotateY(${yaw}deg)`
+      sphere.style.setProperty('--yaw', `${yaw}deg`)
+      sphere.style.setProperty('--pitch', `${pitch}deg`)
       raf = requestAnimationFrame(tick)
     }
 
@@ -211,7 +278,18 @@ export default function App() {
   return (
     <>
       <div className="stage">
-        <div className="sphere" ref={sphereRef}>
+        <div
+          className="sphere"
+          ref={sphereRef}
+          style={
+            {
+              '--depth-fade': dials.depthFade,
+              '--depth-blur': dials.depthBlur,
+              '--depth-dim': dials.depthDim,
+              '--depth-desat': dials.depthDesaturate,
+            } as React.CSSProperties
+          }
+        >
           {nodes.map((node, i) => (
             <Card
               key={i}

@@ -100,4 +100,5 @@ export const PHRASES: string[] = [
   'Catch you later.',
   'Home time.',
   'Goodnight — sleep well.',
+  'Thanks for waiting.',
 ]
