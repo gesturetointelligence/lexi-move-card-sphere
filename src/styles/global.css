@@ -97,6 +97,11 @@ body {
   overflow-wrap: break-word;
 }
 
+.card-back {
+  background-color: color-mix(in srgb, var(--card-bg) 84%, var(--black));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--card-fg) 18%, transparent);
+}
+
 /* --- chrome --- */
 
 .chrome {

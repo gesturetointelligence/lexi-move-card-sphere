@@ -10,6 +10,11 @@ import type { CardColours } from './lib/colour.ts'
 
 const PANEL_ID = 'card-sphere'
 
+// dev-only: lets local tooling drive the dials programmatically
+if (import.meta.env.DEV) {
+  ;(window as unknown as Record<string, unknown>).DialStore = DialStore
+}
+
 interface Dials {
   cards: number
   radius: number
@@ -188,7 +193,9 @@ export default function App() {
     const rng = mulberry32(seed * 2654435761)
     const n = dials.cards
     if (dials.source === 'capture' && captured) {
-      return Array.from({ length: n }, (_, i) => pickPair(captured, i + Math.floor(rng() * 97)))
+      // stride 7 so neighbouring nodes land on distant candidates
+      const offset = Math.floor(rng() * 97)
+      return Array.from({ length: n }, (_, i) => pickPair(captured, i * 7 + offset))
     }
     // one treatment palette per card — shuffled so no two cards share one
     const perm = TREATMENT_PALETTES.map((_, i) => i)

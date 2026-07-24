@@ -57,11 +57,12 @@ function ink(hex: string, dark: boolean): string {
 export function pickPair(palette: string[], pick = 0): CardColours {
   type Cand = CardColours & { score: number }
   const cands: Cand[] = []
+  const MIN_CONTRAST = 2.4
   for (const bg of palette) {
     for (const fg of palette) {
       if (bg === fg) continue
       const cr = contrastRatio(bg, fg)
-      if (cr < 1.9) continue
+      if (cr < MIN_CONTRAST) continue
       // peak reward near 4.5:1, mild penalty past it; reward saturated pairs
       const contrastScore = cr <= 4.5 ? cr / 4.5 : 4.5 / cr
       cands.push({ bg, fg, score: contrastScore * 2 + chroma(bg) + chroma(fg) * 0.6 })
@@ -71,11 +72,11 @@ export function pickPair(palette: string[], pick = 0): CardColours {
     const dark = relativeLuminance(bg) > 0.35
     const fg = ink(bg, dark)
     const cr = contrastRatio(bg, fg)
-    if (cr >= 1.9) cands.push({ bg, fg, score: (Math.min(cr, 4.5) / 4.5) * 1.5 + chroma(bg) })
+    if (cr >= MIN_CONTRAST) cands.push({ bg, fg, score: (Math.min(cr, 4.5) / 4.5) * 1.5 + chroma(bg) })
   }
   if (cands.length === 0) return { bg: palette[0] ?? '#151715', fg: '#f8f9f9' }
   cands.sort((a, b) => b.score - a.score)
-  const top = cands.slice(0, Math.max(3, Math.ceil(cands.length / 3)))
+  const top = cands.slice(0, Math.max(6, Math.ceil(cands.length / 2)))
   return top[pick % top.length]
 }
 
