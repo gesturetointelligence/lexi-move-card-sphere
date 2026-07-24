@@ -1,0 +1,11 @@
+{
+  "name": "Card Sphere",
+  "slug": "card-sphere",
+  "description": "One hundred Magic cards orbiting on a 3D sphere — drag to spin, or let DialKit play it: card count, rotation, treatment-moodboard palettes, and image-captured colour.",
+  "date": "2026-07-24",
+  "authors": ["ravi"],
+  "medium": "interactive",
+  "tags": ["cards", "colour", "3d", "sphere", "magic", "dialkit"],
+  "demo_url": "https://gesturetointelligence.github.io/lexi-move-card-sphere/",
+  "status": "active"
+}

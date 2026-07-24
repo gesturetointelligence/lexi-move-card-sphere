@@ -1,0 +1,11 @@
+{
+  "color": {
+    "signal": "#D0E62C",
+    "black": "#151715",
+    "grey": "#7D827E",
+    "white": "#F8F9F9"
+  },
+  "typography": {
+    "fontFamily": "Founders Grotesk"
+  }
+}
