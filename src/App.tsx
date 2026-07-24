@@ -10,7 +10,7 @@ import { mulberry32, pickPair } from './lib/colour.ts'
 import type { CardColours } from './lib/colour.ts'
 
 const PANEL_ID = 'card-sphere'
-const MAX_CARDS = Math.min(PHRASES.length, TREATMENT_PALETTES.length)
+const MAX_CARDS = 128
 
 // dev-only: lets local tooling drive the dials programmatically
 if (import.meta.env.DEV) {
@@ -27,7 +27,6 @@ interface Dials {
   preset: string
   growMethod: string
   source: string
-  depthFade: number
   depthBlur: number
   depthDim: number
   depthDesaturate: number
@@ -43,7 +42,6 @@ const DEFAULT_DIALS: Dials = {
   preset: 'orbit',
   growMethod: 'bloom',
   source: 'treatment',
-  depthFade: 0,
   depthBlur: 6,
   depthDim: 1,
   depthDesaturate: 1,
@@ -138,7 +136,7 @@ export default function App() {
     registered.current = true
     DialStore.registerPanel(PANEL_ID, 'Card Sphere', {
       sphere: {
-        cards: [DEFAULT_DIALS.cards, 1, MAX_CARDS, 1],
+        cards: [DEFAULT_DIALS.cards, 0, MAX_CARDS, 1],
         radius: [DEFAULT_DIALS.radius, 0, 800, 10],
         cardScale: [DEFAULT_DIALS.cardScale, 0.25, 1.4, 0.01],
       },
@@ -151,7 +149,6 @@ export default function App() {
         grow: { type: 'action', label: 'Grow' },
       },
       depth: {
-        fade: [DEFAULT_DIALS.depthFade, 0, 1, 0.05],
         blur: [DEFAULT_DIALS.depthBlur, 0, 14, 0.5],
         dim: [DEFAULT_DIALS.depthDim, 0, 1, 0.05],
         desaturate: [DEFAULT_DIALS.depthDesaturate, 0, 1, 0.05],
@@ -180,7 +177,6 @@ export default function App() {
         preset: v['motion.preset'] as string,
         growMethod: v['motion.growMethod'] as string,
         source: v['colour.source'] as string,
-        depthFade: v['depth.fade'] as number,
         depthBlur: v['depth.blur'] as number,
         depthDim: v['depth.dim'] as number,
         depthDesaturate: v['depth.desaturate'] as number,
@@ -193,13 +189,31 @@ export default function App() {
     // dial choreography via the selected grow method: it animates the real
     // DialKit values.
     let growRaf = 0
-    const runGrow = () => {
+    let growing = false
+    let growTargets = {
+      cards: DEFAULT_DIALS.cards,
+      radius: DEFAULT_DIALS.radius,
+      scale: DEFAULT_DIALS.cardScale,
+    }
+    const runGrow = (targets?: typeof growTargets) => {
       cancelAnimationFrame(growRaf)
       const v = DialStore.getValues(PANEL_ID)
       const method = GROW_METHODS[v['motion.growMethod'] as string] ?? GROW_METHODS.bloom
-      const targetR = (v['sphere.radius'] as number) || DEFAULT_DIALS.radius
+      // grow always respects the current dials as its destination — card
+      // amount is the maximum, radius and scale are where it settles.
+      // (mid-grow retrigger reuses the captured targets, not partial values)
+      if (targets) growTargets = targets
+      else if (!growing)
+        growTargets = {
+          cards: Math.max(1, v['sphere.cards'] as number),
+          radius: (v['sphere.radius'] as number) || DEFAULT_DIALS.radius,
+          scale: (v['sphere.cardScale'] as number) || DEFAULT_DIALS.cardScale,
+        }
+      growing = true
+      const startScale = Math.min(1.4, growTargets.scale * 1.9)
       DialStore.updateValue(PANEL_ID, 'sphere.cards', 1)
       DialStore.updateValue(PANEL_ID, 'sphere.radius', 0)
+      DialStore.updateValue(PANEL_ID, 'sphere.cardScale', startScale)
       DialStore.updateValue(PANEL_ID, 'motion.play', true)
       DialStore.updateValue(PANEL_ID, 'motion.speed', Math.round(method.speed(0)))
       const t0 = performance.now()
@@ -207,26 +221,44 @@ export default function App() {
       let lastTickAt = 0
       const step = (now: number) => {
         const p = Math.min(1, (now - t0) / method.dur)
-        const cards = Math.max(1, Math.round(method.cards(p) * MAX_CARDS))
+        const cards = Math.max(1, Math.round(method.cards(p) * growTargets.cards))
         if (cards !== lastCards) {
           lastCards = cards
           DialStore.updateValue(PANEL_ID, 'sphere.cards', cards)
         }
         if (now - lastTickAt > 66) {
           lastTickAt = now
-          DialStore.updateValue(PANEL_ID, 'sphere.radius', Math.round(method.radius(p) * targetR))
+          const rp = method.radius(p)
+          DialStore.updateValue(PANEL_ID, 'sphere.radius', Math.round(rp * growTargets.radius))
+          DialStore.updateValue(
+            PANEL_ID,
+            'sphere.cardScale',
+            Math.round((startScale + (growTargets.scale - startScale) * rp) * 100) / 100,
+          )
           DialStore.updateValue(PANEL_ID, 'motion.speed', Math.round(method.speed(p)))
         }
         if (p < 1) {
           growRaf = requestAnimationFrame(step)
         } else {
-          DialStore.updateValue(PANEL_ID, 'sphere.radius', targetR)
+          DialStore.updateValue(PANEL_ID, 'sphere.cards', growTargets.cards)
+          DialStore.updateValue(PANEL_ID, 'sphere.radius', growTargets.radius)
+          DialStore.updateValue(PANEL_ID, 'sphere.cardScale', growTargets.scale)
           DialStore.updateValue(PANEL_ID, 'motion.speed', DEFAULT_DIALS.speed)
+          growing = false
         }
       }
       growRaf = requestAnimationFrame(step)
     }
-    const introTimer = window.setTimeout(runGrow, 500)
+    // intro targets are explicit — the store was just seeded to 1 card / radius 0
+    const introTimer = window.setTimeout(
+      () =>
+        runGrow({
+          cards: DEFAULT_DIALS.cards,
+          radius: DEFAULT_DIALS.radius,
+          scale: DEFAULT_DIALS.cardScale,
+        }),
+      500,
+    )
 
     const unsubValues = DialStore.subscribe(PANEL_ID, readValues)
     const unsubActions = DialStore.subscribeActions(PANEL_ID, (action) => {
@@ -295,7 +327,8 @@ export default function App() {
         pitch = Math.max(-80, Math.min(80, pitch + velPitch))
         velYaw *= 0.95
         velPitch *= 0.95
-        if (d.play) {
+        // 0 = nothing, 1 = a static card; life begins at 2
+        if (d.play && d.cards > 1) {
           const easeTo = (target: number) => {
             pitch += (target - pitch) * Math.min(1, dt * 1.2)
           }
@@ -390,7 +423,6 @@ export default function App() {
           ref={sphereRef}
           style={
             {
-              '--depth-fade': dials.depthFade,
               '--depth-blur': dials.depthBlur,
               '--depth-dim': dials.depthDim,
               '--depth-desat': dials.depthDesaturate,

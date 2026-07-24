@@ -103,7 +103,7 @@ export function CaptureLens({ src, palette, onPalette, onClose }: CaptureLensPro
   return (
     <aside className="lens">
       <header className="lens-bar">
-        <span>capture — drag to pan, scroll to zoom</span>
+        <span>Colour Capture</span>
         <button className="lens-close" onClick={onClose} aria-label="Close">
           ×
         </button>
