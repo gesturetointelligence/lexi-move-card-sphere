@@ -5,7 +5,7 @@ import { Card } from './components/Card.tsx'
 import { CaptureLens } from './components/CaptureLens.tsx'
 import { PHRASES } from './lib/phrases.ts'
 import { TREATMENT_PALETTES } from './lib/palettes.ts'
-import { fibonacciSphere } from './lib/sphere.ts'
+import { sphereNodes } from './lib/sphere.ts'
 import { mulberry32, pickPair } from './lib/colour.ts'
 import type { CardColours } from './lib/colour.ts'
 
@@ -19,6 +19,7 @@ if (import.meta.env.DEV) {
 
 interface Dials {
   cards: number
+  mesh: string
   radius: number
   cardScale: number
   play: boolean
@@ -34,6 +35,7 @@ interface Dials {
 
 const DEFAULT_DIALS: Dials = {
   cards: 64,
+  mesh: 'fibonacci',
   radius: 480,
   cardScale: 0.52,
   play: true,
@@ -47,6 +49,7 @@ const DEFAULT_DIALS: Dials = {
   depthDesaturate: 1,
 }
 
+const MESH_TYPES = ['fibonacci', 'uv', 'icosahedron', 'quad', 'goldberg']
 const MOTION_PRESETS = ['orbit', 'drift', 'pendulum', 'tumble', 'pulse']
 const GROW_METHOD_NAMES = ['bloom', 'spiral', 'burst', 'steps', 'stack']
 
@@ -137,6 +140,7 @@ export default function App() {
     DialStore.registerPanel(PANEL_ID, 'Card Sphere', {
       sphere: {
         cards: [DEFAULT_DIALS.cards, 0, MAX_CARDS, 1],
+        mesh: { type: 'select', options: MESH_TYPES, default: DEFAULT_DIALS.mesh },
         radius: [DEFAULT_DIALS.radius, 0, 800, 10],
         cardScale: [DEFAULT_DIALS.cardScale, 0.25, 1.4, 0.01],
       },
@@ -169,6 +173,7 @@ export default function App() {
       const v = DialStore.getValues(PANEL_ID)
       setDials({
         cards: v['sphere.cards'] as number,
+        mesh: v['sphere.mesh'] as string,
         radius: v['sphere.radius'] as number,
         cardScale: v['sphere.cardScale'] as number,
         play: v['motion.play'] as boolean,
@@ -292,8 +297,6 @@ export default function App() {
 
     const onDown = (e: PointerEvent) => {
       dragging = true
-      // tumble can leave pitch far outside the drag range — normalise first
-      pitch = Math.max(-80, Math.min(80, ((pitch % 360) + 540) % 360 - 180))
       lastX = e.clientX
       lastY = e.clientY
       velYaw = 0
@@ -308,7 +311,8 @@ export default function App() {
       lastX = e.clientX
       lastY = e.clientY
       yaw += dx * 0.25
-      pitch = Math.max(-80, Math.min(80, pitch - dy * 0.25))
+      // no pitch cap — the sphere can spin up/down infinitely
+      pitch -= dy * 0.25
       velYaw = dx * 0.25
       velPitch = -dy * 0.25
     }
@@ -322,15 +326,19 @@ export default function App() {
       lastT = now
       const d = dialsRef.current
       if (!dragging) {
-        // inertia
+        // inertia — no pitch cap, spin carries on freely
         yaw += velYaw
-        pitch = Math.max(-80, Math.min(80, pitch + velPitch))
+        pitch += velPitch
         velYaw *= 0.95
         velPitch *= 0.95
         // 0 = nothing, 1 = a static card; life begins at 2
         if (d.play && d.cards > 1) {
+          // ease toward the nearest equivalent of the target so a spun-up
+          // pitch (e.g. 700°) settles into its wobble without rewinding
+          // through whole turns back toward 0
           const easeTo = (target: number) => {
-            pitch += (target - pitch) * Math.min(1, dt * 1.2)
+            const nearest = target + 360 * Math.round((pitch - target) / 360)
+            pitch += (nearest - pitch) * Math.min(1, dt * 1.2)
           }
           switch (d.preset) {
             case 'drift': // slow wander, speed swelling and ebbing
@@ -392,7 +400,7 @@ export default function App() {
   }
 
   // --- card data ---
-  const nodes = useMemo(() => fibonacciSphere(dials.cards), [dials.cards])
+  const nodes = useMemo(() => sphereNodes(dials.mesh, dials.cards), [dials.mesh, dials.cards])
 
   const colours = useMemo<CardColours[]>(() => {
     const rng = mulberry32(seed * 2654435761)
