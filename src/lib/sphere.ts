@@ -68,9 +68,89 @@ function rotateToFront(verts: Vec3[], ref: Vec3): Vec3[] {
 }
 
 /**
+ * Small deterministic PRNG shuffle (mulberry32), used only to break ties in
+ * `farthestPointSample` without a systematic directional bias — see there.
+ */
+function seededShuffle<T>(arr: T[], seed: number): T[] {
+  let s = seed >>> 0
+  const rand = () => {
+    s = (s + 0x6d2b79f5) | 0
+    let t = Math.imul(s ^ (s >>> 15), 1 | s)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+  const out = arr.slice()
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rand() * (i + 1))
+    ;[out[i], out[j]] = [out[j], out[i]]
+  }
+  return out
+}
+
+/**
+ * Farthest-point (max-min distance) downsampling: greedily pick n vertices
+ * out of `verts` so each new pick maximizes its minimum distance to the
+ * already-selected set. Starts from `verts[0]` (the caller's chosen seed) so
+ * that vertex is guaranteed to survive. This spreads the selection evenly
+ * over the whole input set rather than clustering it, unlike a plain
+ * z-ordered slice. O(n·V) — V tops out around ~1300 for our meshes, so this
+ * stays cheap even at MAX_NODES.
+ *
+ * Ties in max-min-distance are common on regular meshes (e.g. quad-sphere's
+ * cube-edge vertices sit exactly on the z=0 equator in unusual numbers), and
+ * scanning candidates in a fixed z-descending order would always resolve
+ * those ties toward the earlier (front-hemisphere) candidate — quietly
+ * skewing the whole selection toward the front. `verts` is expected to have
+ * its non-seed entries pre-shuffled (see `finalize`) so tie-breaks land
+ * without a directional bias while the seed (index 0) is always kept.
+ */
+function farthestPointSample(verts: Vec3[], n: number): Vec3[] {
+  const total = verts.length
+  const selected: number[] = [0]
+  const minDistSq = new Float64Array(total).fill(Infinity)
+  const absorb = (idx: number) => {
+    const [sx, sy, sz] = verts[idx]
+    for (let i = 0; i < total; i++) {
+      const [x, y, z] = verts[i]
+      const dx = x - sx
+      const dy = y - sy
+      const dz = z - sz
+      const d = dx * dx + dy * dy + dz * dz
+      if (d < minDistSq[i]) minDistSq[i] = d
+    }
+    minDistSq[idx] = -Infinity // never reselect
+  }
+  absorb(0)
+  for (let picked = 1; picked < n; picked++) {
+    let best = -1
+    let bestDist = -Infinity
+    for (let i = 0; i < total; i++) {
+      if (minDistSq[i] > bestDist) {
+        bestDist = minDistSq[i]
+        best = i
+      }
+    }
+    selected.push(best)
+    absorb(best)
+  }
+  return selected.map((i) => verts[i])
+}
+
+/**
  * Deduplicate shared vertices (rounding to ~1e-6 to fold coincident points),
- * sort by z descending so the vertex nearest the viewer is first, then convert
- * to nodes and take the first n. This guarantees node 0 faces front-centre.
+ * sort by z descending so the vertex nearest the viewer is first, snap that
+ * front-most vertex to front-centre, then reduce to n nodes.
+ *
+ * When the mesh's natural vertex count already fits within n, every vertex is
+ * kept (z-sorted). When it exceeds n (e.g. goldberg needs 20·4^k ≥ n, so a
+ * 128-card sphere is generated from 320 cell centres), a plain z-sorted slice
+ * would just take the front-most n vertices — bunching every card into the
+ * front hemisphere cap and leaving the back empty. Instead we farthest-point
+ * sample the full deduped set, seeded at the front-most (already front-snapped)
+ * vertex so node 0 stays the front-centre branded card, which spreads the
+ * kept vertices across the whole sphere while still landing exactly on mesh
+ * vertices (so each mesh keeps its character — uv rings, quad grid, goldberg
+ * cell centres).
  */
 function finalize(verts: Vec3[], n: number): SphereNode[] {
   if (n <= 0) return []
@@ -87,7 +167,13 @@ function finalize(verts: Vec3[], n: number): SphereNode[] {
   // nudged the z-ordering of the remaining vertices.
   const snapped = rotateToFront(unique, unique[0])
   snapped.sort((a, b) => b[2] - a[2])
-  return snapped.slice(0, n).map(vecToNode)
+  if (snapped.length <= n) return snapped.map(vecToNode)
+  // shuffle everything but the seed (index 0) so tie-breaking during the
+  // scan is unbiased; a fixed seed keeps the result deterministic per call.
+  const scanOrder = [snapped[0], ...seededShuffle(snapped.slice(1), 0x9e3779b9)]
+  const picked = farthestPointSample(scanOrder, n)
+  picked.sort((a, b) => b[2] - a[2])
+  return picked.map(vecToNode)
 }
 
 /**
