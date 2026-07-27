@@ -62,6 +62,23 @@ body {
   --depth-desat: 1;
 }
 
+/* registered as typed <angle> custom properties so the browser can use the
+   typed value directly in every descendant card's calc() each frame instead
+   of re-tokenising an untyped string value 128 times per frame. inherits:true
+   keeps the existing inheritance behaviour (cards read the sphere's current
+   rotation to counter-rotate). No entry in `transition` below — these are
+   written every animation frame and must apply immediately, not animate. */
+@property --yaw {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: 0deg;
+}
+@property --pitch {
+  syntax: '<angle>';
+  inherits: true;
+  initial-value: 0deg;
+}
+
 /* registered so dial changes (count / radius / scale) transition smoothly */
 @property --ry {
   syntax: '<angle>';
