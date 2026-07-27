@@ -5,7 +5,7 @@ import { Card } from './components/Card.tsx'
 import { CaptureLens } from './components/CaptureLens.tsx'
 import { PHRASES } from './lib/phrases.ts'
 import { TREATMENT_PALETTES } from './lib/palettes.ts'
-import { sphereNodes } from './lib/sphere.ts'
+import { fibonacciSphere } from './lib/sphere.ts'
 import { mulberry32, pickPair } from './lib/colour.ts'
 import type { CardColours } from './lib/colour.ts'
 
@@ -19,7 +19,6 @@ if (import.meta.env.DEV) {
 
 interface Dials {
   cards: number
-  mesh: string
   radius: number
   cardScale: number
   play: boolean
@@ -35,7 +34,6 @@ interface Dials {
 
 const DEFAULT_DIALS: Dials = {
   cards: 64,
-  mesh: 'fibonacci',
   radius: 480,
   cardScale: 0.52,
   play: true,
@@ -49,7 +47,6 @@ const DEFAULT_DIALS: Dials = {
   depthDesaturate: 1,
 }
 
-const MESH_TYPES = ['fibonacci', 'uv', 'icosahedron', 'quad', 'goldberg']
 const MOTION_PRESETS = ['orbit', 'drift', 'pendulum', 'tumble', 'pulse']
 const GROW_METHOD_NAMES = ['bloom', 'spiral', 'burst', 'steps', 'stack']
 
@@ -140,7 +137,6 @@ export default function App() {
     DialStore.registerPanel(PANEL_ID, 'Card Sphere', {
       sphere: {
         cards: [DEFAULT_DIALS.cards, 0, MAX_CARDS, 1],
-        mesh: { type: 'select', options: MESH_TYPES, default: DEFAULT_DIALS.mesh },
         radius: [DEFAULT_DIALS.radius, 0, 800, 10],
         cardScale: [DEFAULT_DIALS.cardScale, 0.25, 1.4, 0.01],
       },
@@ -173,7 +169,6 @@ export default function App() {
       const v = DialStore.getValues(PANEL_ID)
       setDials({
         cards: v['sphere.cards'] as number,
-        mesh: v['sphere.mesh'] as string,
         radius: v['sphere.radius'] as number,
         cardScale: v['sphere.cardScale'] as number,
         play: v['motion.play'] as boolean,
@@ -400,7 +395,7 @@ export default function App() {
   }
 
   // --- card data ---
-  const nodes = useMemo(() => sphereNodes(dials.mesh, dials.cards), [dials.mesh, dials.cards])
+  const nodes = useMemo(() => fibonacciSphere(dials.cards), [dials.cards])
 
   const colours = useMemo<CardColours[]>(() => {
     const rng = mulberry32(seed * 2654435761)
